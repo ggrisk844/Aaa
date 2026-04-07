@@ -1,0 +1,8 @@
+{
+  "name": "Adding chat system",
+  "description": "A modern, 3D-animated school website with a full admin dashboard for managing content, teachers, students, and gallery.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
