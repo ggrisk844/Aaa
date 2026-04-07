@@ -128,9 +128,9 @@ const ResourceManager = ({
   glowClass
 }: { 
   title: string, 
-  getData: () => any[], 
-  saveData: (data: any) => void, 
-  deleteData: (id: string) => void,
+  getData: () => Promise<any[]>, 
+  saveData: (data: any) => Promise<void> | void, 
+  deleteData: (id: string) => Promise<void> | void,
   fields: { name: string, label: string, type: 'text' | 'textarea' | 'date' | 'url' | 'image' | 'number' | 'select', options?: string[] }[],
   glowClass?: string
 }) => {
@@ -139,8 +139,11 @@ const ResourceManager = ({
   const [currentItem, setCurrentItem] = useState<any>({});
   const [searchTerm, setSearchTerm] = useState('');
 
-  const refresh = () => setItems([...getData()]); 
-  useEffect(() => refresh(), []);
+  const refresh = async () => {
+    const data = await getData();
+    setItems([...data]);
+  };
+  useEffect(() => { refresh(); }, []);
 
   const handleAddNew = () => {
     // Reset the form properly
@@ -150,19 +153,19 @@ const ResourceManager = ({
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = currentItem.id || (Date.now() + Math.random().toString(36).substr(2, 9));
-    saveData({ ...currentItem, id });
+    await saveData({ ...currentItem, id });
     setIsModalOpen(false);
-    refresh(); 
+    await refresh(); 
     showToast(`${title} saved successfully!`);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if(window.confirm('Are you sure you want to delete this item?')) {
-      deleteData(id);
-      refresh(); 
+      await deleteData(id);
+      await refresh(); 
       showToast(`${title} deleted successfully.`, 'info');
     }
   };
@@ -609,7 +612,15 @@ const SettingsPage = () => {
 };
 
 const DashboardHome = () => {
-  const stats = db.getStats();
+  const [stats, setStats] = useState({ teachers: 0, students: 0, staff: 0, notices: 0, events: 0, results: 0 });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const data = await db.getStats();
+      setStats(data);
+    };
+    fetchStats();
+  }, []);
   
   return (
     <div className="space-y-8 animate-fade-in">

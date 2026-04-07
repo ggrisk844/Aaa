@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../services/db';
 import { Calendar, MapPin, Mail, Phone, Search, Download, RefreshCw, Clock, Users, X, Check, Send, Award, BookOpen } from 'lucide-react';
 import { showToast } from '../components/Layout';
-import { SchoolInfo, Teacher, Staff, Student, Event, Notice, GalleryItem } from '../types';
+import { SchoolInfo, Teacher, Staff as StaffType, Student, Event, Notice, GalleryItem } from '../types';
 
 // About Page
 export const About = () => {
@@ -145,7 +145,7 @@ export const Teachers = () => {
 
 // Staff Page
 export const Staff = () => {
-  const [staff, setStaff] = useState<Staff[]>([]);
+  const [staff, setStaff] = useState<StaffType[]>([]);
 
   useEffect(() => {
       const fetchStaff = async () => {
@@ -216,11 +216,11 @@ export const Students = () => {
   }) || ['6','7','8','9','10','11','12'];
 
   // Remove duplicates and sort numerically/alphabetically if possible
-  const uniqueClassOptions = Array.from(new Set(classOptions)).sort((a: string, b: string) => {
+  const uniqueClassOptions = Array.from(new Set(classOptions)).sort((a: any, b: any) => {
       const numA = parseInt(a);
       const numB = parseInt(b);
       if(!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.localeCompare(b);
+      return String(a).localeCompare(String(b));
   });
 
 

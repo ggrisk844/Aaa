@@ -11,10 +11,9 @@ export const Results = () => {
     const [className, setClassName] = useState('');
     const [result, setResult] = useState<ExamResult | null>(null);
     const [searched, setSearched] = useState(false);
-    const allResults = db.getResults();
-
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
+        const allResults = await db.getResults();
         // Case insensitive search and robust whitespace handling
         const found = allResults.find(r => 
             r.roll.trim().toLowerCase() === roll.trim().toLowerCase() && 
