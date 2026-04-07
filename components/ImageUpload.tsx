@@ -126,7 +126,11 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, label
         </div>
       ) : (
         <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 h-48 w-full group shadow-md bg-gray-100 dark:bg-gray-800">
-             <img src={value} alt="Uploaded preview" className="w-full h-full object-contain" />
+             {value ? (
+                 <img src={value?.trim() || undefined} alt="Uploaded preview" className="w-full h-full object-contain" />
+             ) : (
+                 <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+             )}
              <div className="absolute inset-0 bg-black/60 flex flex-col gap-3 items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-sm">
                  <button 
                     onClick={(e) => { e.stopPropagation(); onChange(''); }}

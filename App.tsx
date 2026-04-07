@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
@@ -9,6 +9,7 @@ import { About, Teachers, Staff, Students, Notices, Gallery, Contact, Events } f
 import { Results } from './pages/Result';
 import { Chat } from './pages/Chat';
 import { db } from './services/db';
+import { supabase } from './services/supabase';
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -21,7 +22,29 @@ const ScrollToTop = () => {
 };
 
 const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
-  if (!db.isAuthenticated()) {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const auth = await db.isAuthenticated();
+      setIsAuthenticated(auth);
+    };
+    checkAuth();
+    
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        setIsAuthenticated(!!session);
+    });
+    
+    return () => {
+        authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (isAuthenticated === null) {
+      return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;

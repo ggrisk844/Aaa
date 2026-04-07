@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Sun, Moon, Phone, GraduationCap, MessageCircle, LogOut, CheckCircle, AlertCircle, Info, XCircle } from 'lucide-react';
 import { db } from '../services/db';
 import { CallSystem } from './CallSystem';
+import { User, SchoolInfo } from '../types';
 
 // --- Toast System ---
 export const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -56,7 +57,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const [user, setUser] = useState(db.getCurrentUser());
+  const [user, setUser] = useState<User | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -68,10 +69,11 @@ const Navbar = () => {
 
   useEffect(() => {
     if (document.documentElement.classList.contains('dark')) setIsDark(true);
-    const handleStorage = () => setUser(db.getCurrentUser());
-    window.addEventListener('storage', handleStorage);
-    setUser(db.getCurrentUser());
-    return () => window.removeEventListener('storage', handleStorage);
+    const fetchUser = async () => {
+        const currentUser = await db.getCurrentUser();
+        setUser(currentUser);
+    };
+    fetchUser();
   }, [location]);
 
   const toggleTheme = () => {
@@ -84,8 +86,8 @@ const Navbar = () => {
     }
   };
 
-  const handleLogout = () => {
-      db.logout();
+  const handleLogout = async () => {
+      await db.logout();
       setUser(null);
       showToast('Logged out successfully', 'info');
       navigate('/');
@@ -223,7 +225,17 @@ const Navbar = () => {
 };
 
 const Footer = () => {
-  const info = db.getInfo();
+  const [info, setInfo] = useState<SchoolInfo | null>(null);
+
+  useEffect(() => {
+    const fetchInfo = async () => {
+      const fetchedInfo = await db.getInfo();
+      setInfo(fetchedInfo);
+    };
+    fetchInfo();
+  }, []);
+
+  if (!info) return null;
   
   return (
     <footer className="bg-gray-900 text-white pt-20 pb-10 relative overflow-hidden mt-12">
@@ -265,15 +277,19 @@ const Footer = () => {
           <div>
              <h4 className="text-lg font-bold mb-6 text-primary-400">Location</h4>
              <div className="w-full h-40 bg-gray-800 rounded-2xl overflow-hidden shadow-lg border border-gray-700 hover:border-primary-500 transition-colors duration-300 card-3d">
-                 <iframe 
-                    src={info.mapEmbedUrl} 
-                    width="100%" 
-                    height="100%" 
-                    style={{border:0}} 
-                    allowFullScreen 
-                    loading="lazy" 
-                    className="opacity-70 hover:opacity-100 transition duration-500"
-                 />
+                 {info.mapEmbedUrl ? (
+                     <iframe 
+                        src={info.mapEmbedUrl || undefined} 
+                        width="100%" 
+                        height="100%" 
+                        style={{border:0}} 
+                        allowFullScreen 
+                        loading="lazy" 
+                        className="opacity-70 hover:opacity-100 transition duration-500"
+                     />
+                 ) : (
+                     <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm">Map not available</div>
+                 )}
              </div>
           </div>
         </div>

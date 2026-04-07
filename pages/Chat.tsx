@@ -40,7 +40,7 @@ const Avatar = ({ user, size = 'md', onClick }: { user?: User, size?: 'sm' | 'md
     const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base', xl: 'w-16 h-16 text-xl' };
     return (
         <div onClick={onClick} className={`${sizeClasses[size]} rounded-full flex-shrink-0 bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300 shadow-sm overflow-hidden border border-white dark:border-gray-700 relative cursor-pointer hover:opacity-90 transition`}>
-            {user?.avatar ? <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" /> : <span>{user?.username?.[0]?.toUpperCase() || '?'}</span>}
+            {user?.avatar ? <img src={user.avatar?.trim() || undefined} alt={user.username} className="w-full h-full object-cover" /> : <span>{user?.username?.[0]?.toUpperCase() || '?'}</span>}
             {user?.lastActive && (Date.now() - user.lastActive < 120000) && (
                     <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
             )}
@@ -170,7 +170,7 @@ const AudioPlayer = ({ src, isMe }: { src: string, isMe: boolean }) => {
 
             <audio 
                 ref={audioRef}
-                src={src}
+                src={src?.trim() || undefined}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handleEnded}
                 onLoadedMetadata={handleLoadedMetadata}
@@ -240,8 +240,8 @@ const ProfileModal = ({ user, onClose }: { user: User, onClose: () => void }) =>
     const [bio, setBio] = useState(user.bio || '');
     const [avatar, setAvatar] = useState(user.avatar || '');
 
-    const handleSave = () => {
-        db.saveUser({ ...user, bio, avatar });
+    const handleSave = async () => {
+        await db.saveUser({ ...user, bio, avatar });
         showToast('Profile updated successfully!');
         onClose();
     };
@@ -258,7 +258,7 @@ const ProfileModal = ({ user, onClose }: { user: User, onClose: () => void }) =>
                         <div className="relative group">
                             <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-violet-100 dark:border-violet-900 shadow-xl">
                                 {avatar ? (
-                                    <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+                                    <img src={avatar?.trim() || undefined} alt="Profile" className="w-full h-full object-cover" />
                                 ) : (
                                     <div className="w-full h-full bg-violet-100 dark:bg-gray-700 flex items-center justify-center">
                                         <UserIcon size={48} className="text-violet-300" />
@@ -307,7 +307,7 @@ const DateSeparator = ({ date }: { date: string }) => (
 // --- Main Component ---
 
 export const Chat = () => {
-    const currentUser = db.getCurrentUser();
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [recentChats, setRecentChats] = useState<(ChatSession & { otherUser: User })[]>([]);
     const [activeChat, setActiveChat] = useState<ChatSession | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -350,22 +350,57 @@ export const Chat = () => {
     // Helpers
     const getUser = (username: string) => allUsers.find(u => u.username === username);
 
-    const refreshData = () => {
-        setAllUsers(db.getUsers());
-        setRecentChats(db.getRecentChats());
-        if (activeChat && currentUser) {
-            const msgs = db.getMessages(activeChat.id);
+    const refreshData = async () => {
+        const user = await db.getCurrentUser();
+        setCurrentUser(user);
+        setAllUsers(await db.getUsers());
+        setRecentChats(await db.getRecentChats());
+        if (activeChat && user) {
+            const msgs = await db.getMessages(activeChat.id);
             setMessages(msgs);
-            db.markMessagesAsRead(activeChat.id, currentUser.username);
-            setTypingUser(db.getTypingUser(activeChat.id, currentUser.username));
+            await db.markMessagesAsRead(activeChat.id, user.username);
         }
     };
 
     useEffect(() => {
         refreshData();
-        const interval = setInterval(refreshData, 1000); 
-        const handleStorage = () => refreshData();
-        window.addEventListener('storage', handleStorage);
+        
+        // Listen to typing events
+        const handleTyping = (e: any) => {
+            const data = e.detail;
+            if (activeChat && data.chatId === activeChat.id && currentUser && data.username !== currentUser.username) {
+                if (data.isTyping) {
+                    setTypingUser(data.username);
+                    // Clear typing user after 3 seconds if no new events
+                    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = setTimeout(() => setTypingUser(null), 3000);
+                } else {
+                    setTypingUser(null);
+                }
+            }
+        };
+        window.addEventListener('supabase_typing', handleTyping);
+
+        // Supabase Realtime for messages and chats
+        let channel: any;
+        let chatsChannel: any;
+        
+        import('../services/supabase').then(({ supabase }) => {
+            if (activeChat) {
+                channel = supabase.channel(`chat_${activeChat.id}`)
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `chatId=eq.${activeChat.id}` }, () => {
+                        refreshData();
+                    })
+                    .subscribe();
+            }
+            
+            chatsChannel = supabase.channel('public_chats')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => {
+                    refreshData();
+                })
+                .subscribe();
+        });
+
         const closeMenu = () => {
             setContextMenu(null);
         };
@@ -379,12 +414,13 @@ export const Chat = () => {
         document.addEventListener('mousedown', handleOutsideClick);
 
         return () => {
-            clearInterval(interval);
-            window.removeEventListener('storage', handleStorage);
+            if (channel) channel.unsubscribe();
+            if (chatsChannel) chatsChannel.unsubscribe();
+            window.removeEventListener('supabase_typing', handleTyping);
             window.removeEventListener('click', closeMenu);
             document.removeEventListener('mousedown', handleOutsideClick);
         };
-    }, [activeChat?.id]);
+    }, [activeChat?.id, currentUser?.username]);
 
     // Initial Scroll
     useEffect(() => {
@@ -415,7 +451,7 @@ export const Chat = () => {
 
     useEffect(() => {
         if (searchQuery.trim()) {
-            setSearchResults(db.searchUsers(searchQuery));
+            db.searchUsers(searchQuery).then(setSearchResults);
         } else {
             setSearchResults([]);
         }
@@ -432,19 +468,19 @@ export const Chat = () => {
         return () => clearInterval(interval);
     }, [isRecording]);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         setInputText(e.target.value);
         if (activeChat && currentUser) {
              db.setTyping(activeChat.id, currentUser.username, true);
              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-             typingTimeoutRef.current = setTimeout(() => {
+             typingTimeoutRef.current = setTimeout(async () => {
                  db.setTyping(activeChat.id, currentUser.username, false);
              }, 2000);
         }
     };
 
-    const handleStartChat = (username: string) => {
-        const session = db.getChatSession(username);
+    const handleStartChat = async (username: string) => {
+        const session = await db.getChatSession(username);
         setActiveChat({ ...session });
         setSearchQuery('');
         setSearchResults([]);
@@ -479,10 +515,10 @@ export const Chat = () => {
                  const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                  const reader = new FileReader();
                  reader.readAsDataURL(audioBlob);
-                 reader.onloadend = () => {
+                 reader.onloadend = async () => {
                      const base64Audio = reader.result as string;
                      // @ts-ignore
-                     db.sendMessage(activeChat?.id, '', undefined, base64Audio, replyingTo);
+                     await db.sendMessage(activeChat?.id, '', undefined, base64Audio, replyingTo);
                      refreshData();
                      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                  };
@@ -493,16 +529,16 @@ export const Chat = () => {
         setIsRecording(false);
     };
 
-    const handleSend = () => {
+    const handleSend = async () => {
         if ((!inputText.trim() && !uploadImage) || !activeChat || !currentUser) return;
         db.setTyping(activeChat.id, currentUser.username, false);
 
         if (editingId) {
-            db.editMessage(activeChat.id, editingId, inputText);
+            await db.editMessage(activeChat.id, editingId, inputText);
             setEditingId(null);
         } else {
             // @ts-ignore
-            db.sendMessage(activeChat.id, inputText, uploadImage, undefined, replyingTo);
+            await db.sendMessage(activeChat.id, inputText, uploadImage, undefined, replyingTo);
         }
 
         setInputText('');
@@ -514,9 +550,9 @@ export const Chat = () => {
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };
 
-    const handleDeleteMessage = (id: string) => {
+    const handleDeleteMessage = async (id: string) => {
         if(activeChat) {
-            db.deleteMessage(activeChat.id, id);
+            await db.deleteMessage(activeChat.id, id);
             refreshData();
             showToast('Message deleted');
         }
@@ -538,29 +574,29 @@ export const Chat = () => {
         showToast('Photo downloaded', 'success');
     };
 
-    const handleClearChat = () => {
+    const handleClearChat = async () => {
         if (activeChat && window.confirm("Are you sure you want to clear the chat history?")) {
-            db.clearChat(activeChat.id);
+            await db.clearChat(activeChat.id);
             refreshData();
             setIsMenuOpen(false);
         }
     };
 
-    const handleBlockUser = () => {
+    const handleBlockUser = async () => {
         if (!activeChat || !currentUser) return;
         const otherUsername = activeChat.participants.find(p => p !== currentUser.username);
         if (otherUsername) {
-            db.toggleBlock(otherUsername);
+            await db.toggleBlock(otherUsername);
             refreshData();
             setIsMenuOpen(false);
         }
     };
 
-    const handleMuteUser = () => {
+    const handleMuteUser = async () => {
         if (!activeChat || !currentUser) return;
         const otherUsername = activeChat.participants.find(p => p !== currentUser.username);
         if (otherUsername) {
-            db.toggleMute(otherUsername);
+            await db.toggleMute(otherUsername);
             refreshData();
             setIsMenuOpen(false);
         }
@@ -813,7 +849,7 @@ export const Chat = () => {
                                                     >
                                                         {msg.image && (
                                                             <div className="mb-3 -mx-3 -mt-3 overflow-hidden rounded-t-[18px] relative group/image">
-                                                                <img src={msg.image} alt="Attachment" className="w-full h-auto object-cover max-h-72 cursor-pointer hover:opacity-95 transition" onClick={() => window.open(msg.image, '_blank')} />
+                                                                <img src={msg.image?.trim() || undefined} alt="Attachment" className="w-full h-auto object-cover max-h-72 cursor-pointer hover:opacity-95 transition" onClick={() => window.open(msg.image, '_blank')} />
                                                                 <button 
                                                                     onClick={(e) => handleDownloadImage(e, msg.image!)}
                                                                     className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition backdrop-blur-sm shadow-md"

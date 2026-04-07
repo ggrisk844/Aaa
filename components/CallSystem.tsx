@@ -77,43 +77,39 @@ export const CallSystem = () => {
     useEffect(() => {
         if (!currentUser) return;
 
-        const handleStorage = (e: StorageEvent) => {
-            if (e.key === 'school_call_signal' && e.newValue) {
-                const signal: CallSignal = JSON.parse(e.newValue);
-                // Ignore old signals (> 30 seconds)
-                if (Date.now() - signal.timestamp > 30000) return;
+        const handleCallSignal = (e: any) => {
+            const signal: CallSignal = e.detail;
+            // Ignore old signals (> 30 seconds)
+            if (Date.now() - signal.timestamp > 30000) return;
 
-                if (signal.to === currentUser.username) {
-                    // Signal For Me
-                    if (signal.action === 'offer') {
-                        if (callState === 'idle') {
-                            setOtherUser(signal.from);
-                            setCallType(signal.type);
-                            setCallState('incoming');
-                            setIsVideoOff(signal.type === 'audio');
-                        } else {
-                            // Busy
-                            db.sendCallSignal({ id: signal.id, from: currentUser.username, to: signal.from, type: signal.type, action: 'busy' });
-                        }
-                    } else if (signal.action === 'end') {
-                        endCall(false); // Remote ended
+            if (signal.to === currentUser.username) {
+                // Signal For Me
+                if (signal.action === 'offer') {
+                    if (callState === 'idle') {
+                        setOtherUser(signal.from);
+                        setCallType(signal.type);
+                        setCallState('incoming');
+                        setIsVideoOff(signal.type === 'audio');
+                    } else {
+                        // Busy
+                        db.sendCallSignal({ id: signal.id, from: currentUser.username, to: signal.from, type: signal.type, action: 'busy' });
                     }
-                } else if (signal.from === currentUser.username && signal.to === otherUser) {
-                     // Signal I sent (ignored usually, but could verify)
-                } else if (signal.to === currentUser.username && signal.action === 'answer' && callState === 'outgoing') {
+                } else if (signal.action === 'end') {
+                    endCall(false); // Remote ended
+                } else if (signal.action === 'answer' && callState === 'outgoing') {
                      // They accepted my call!
                      setCallState('connected');
-                } else if (signal.to === currentUser.username && signal.action === 'reject' && callState === 'outgoing') {
+                } else if (signal.action === 'reject' && callState === 'outgoing') {
                      showToast(`${otherUser} declined the call.`, 'info');
                      endCall(false);
-                } else if (signal.to === currentUser.username && signal.action === 'busy' && callState === 'outgoing') {
+                } else if (signal.action === 'busy' && callState === 'outgoing') {
                      showToast(`${otherUser} is busy.`, 'info');
                      endCall(false);
                 }
             }
         };
-        window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
+        window.addEventListener('supabase_call_signal', handleCallSignal);
+        return () => window.removeEventListener('supabase_call_signal', handleCallSignal);
     }, [currentUser, callState, otherUser]);
 
     // Timer for connected state

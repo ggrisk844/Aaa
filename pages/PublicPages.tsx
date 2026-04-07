@@ -5,10 +5,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../services/db';
 import { Calendar, MapPin, Mail, Phone, Search, Download, RefreshCw, Clock, Users, X, Check, Send, Award, BookOpen } from 'lucide-react';
 import { showToast } from '../components/Layout';
+import { SchoolInfo, Teacher, StaffMember, Student, Event, Notice, GalleryItem } from '../types';
 
 // About Page
 export const About = () => {
-  const info = db.getInfo();
+  const [info, setInfo] = useState<SchoolInfo | null>(null);
+
+  useEffect(() => {
+      const fetchInfo = async () => {
+          const data = await db.getInfo();
+          setInfo(data);
+      };
+      fetchInfo();
+  }, []);
+
+  if (!info) return <div className="pt-32 pb-20 text-center">Loading...</div>;
+
   const classStats = info.classStats || [];
 
   return (
@@ -73,7 +85,16 @@ export const About = () => {
 
 // Teachers Page
 export const Teachers = () => {
-  const teachers = db.getTeachers();
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+
+  useEffect(() => {
+      const fetchTeachers = async () => {
+          const data = await db.getTeachers();
+          setTeachers(data);
+      };
+      fetchTeachers();
+  }, []);
+
   return (
     <div className="pt-32 pb-20 container mx-auto px-6">
       <div className="text-center mb-16">
@@ -90,8 +111,12 @@ export const Teachers = () => {
             className="card-3d bg-white dark:bg-gray-800 rounded-3xl overflow-hidden shadow-xl group border-2 border-transparent hover:border-primary-500/30 dark:hover:border-primary-500/30 glow-green"
           >
             <div className="h-80 overflow-hidden relative">
-                <img src={t.imageUrl} alt={t.name} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
-                     onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=No+Image' }} />
+                {t.imageUrl ? (
+                    <img src={t.imageUrl?.trim() || undefined} alt={t.name} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
+                         onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=No+Image' }} />
+                ) : (
+                    <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">No Image</div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition duration-300"></div>
                 
                 <div className="absolute bottom-4 left-4 right-4 text-white transform translate-y-4 group-hover:translate-y-0 transition duration-300">
@@ -120,7 +145,16 @@ export const Teachers = () => {
 
 // Staff Page
 export const Staff = () => {
-  const staff = db.getStaff();
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+      const fetchStaff = async () => {
+          const data = await db.getStaff();
+          setStaff(data);
+      };
+      fetchStaff();
+  }, []);
+
   return (
     <div className="pt-32 pb-20 container mx-auto px-6">
       <div className="text-center mb-16">
@@ -137,8 +171,12 @@ export const Staff = () => {
             className="card-3d bg-white dark:bg-gray-800 rounded-3xl overflow-hidden shadow-xl group border border-gray-100 dark:border-gray-700 glow-indigo"
           >
             <div className="h-72 overflow-hidden relative">
-                <img src={s.imageUrl} alt={s.name} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
-                     onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=No+Image' }} />
+                {s.imageUrl ? (
+                    <img src={s.imageUrl?.trim() || undefined} alt={s.name} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
+                         onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=No+Image' }} />
+                ) : (
+                    <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">No Image</div>
+                )}
                 <div className="absolute inset-0 bg-indigo-600/20 group-hover:bg-indigo-600/0 transition duration-300"></div>
             </div>
             <div className="p-6 relative text-center border-t-4 border-indigo-500">
@@ -156,16 +194,23 @@ export const Staff = () => {
 export const Students = () => {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('All');
-  const [students, setStudents] = useState(db.getStudents());
+  const [students, setStudents] = useState<Student[]>([]);
+  const [info, setInfo] = useState<SchoolInfo | null>(null);
   const [trigger, setTrigger] = useState(0);
 
-  // Get dynamic classes from DB info
-  const info = db.getInfo();
-  // Extract class numbers/names from classStats, removing "Class " prefix if present for cleaner matching
-  // But since student data usually stores just the number (e.g. "6"), we might need to handle both.
-  // We'll create a list of available class options based on the configured Class Stats.
-  const classOptions = info.classStats?.map(c => {
-      // Attempt to extract the number if format is "Class X"
+  useEffect(() => {
+      const fetchData = async () => {
+          const [fetchedStudents, fetchedInfo] = await Promise.all([
+              db.getStudents(),
+              db.getInfo()
+          ]);
+          setStudents(fetchedStudents);
+          setInfo(fetchedInfo);
+      };
+      fetchData();
+  }, [trigger]);
+
+  const classOptions = info?.classStats?.map(c => {
       const match = c.className.match(/Class\s+(.+)/i);
       return match ? match[1] : c.className;
   }) || ['6','7','8','9','10','11','12'];
@@ -180,10 +225,6 @@ export const Students = () => {
 
 
   // Ensure we get fresh data on mount and updates
-  useEffect(() => {
-    setStudents(db.getStudents());
-  }, [trigger]);
-
   const handleRefresh = () => {
     setTrigger(prev => prev + 1);
     showToast('Student list refreshed', 'info');
@@ -244,8 +285,12 @@ export const Students = () => {
                 >
                     <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-br from-emerald-400 to-green-600 opacity-20 group-hover:opacity-30 transition"></div>
                     <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-4 border-white dark:border-gray-700 shadow-lg mb-4 bg-gray-200 relative z-10 group-hover:scale-105 transition duration-500">
-                        <img src={s.imageUrl} alt={s.name} className="w-full h-full object-cover" 
-                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Student' }} />
+                        {s.imageUrl ? (
+                            <img src={s.imageUrl?.trim() || undefined} alt={s.name} className="w-full h-full object-cover" 
+                                 onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Student' }} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No IMG</div>
+                        )}
                     </div>
                     <div className="relative z-10">
                         <h3 className="text-xl font-bold dark:text-white mb-1 group-hover:text-emerald-600 transition">{s.name || 'Unknown Name'}</h3>
@@ -270,7 +315,16 @@ export const Students = () => {
 
 // Events Page
 export const Events = () => {
-    const events = db.getEvents();
+    const [events, setEvents] = useState<Event[]>([]);
+
+    useEffect(() => {
+        const fetchEvents = async () => {
+            const data = await db.getEvents();
+            setEvents(data);
+        };
+        fetchEvents();
+    }, []);
+
     return (
         <div className="pt-32 pb-20 container mx-auto px-6">
             <h1 className="text-5xl font-display font-bold text-center mb-16 dark:text-white">Upcoming Events</h1>
@@ -284,8 +338,12 @@ export const Events = () => {
                         className="card-3d bg-white dark:bg-gray-800 rounded-3xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-700 flex flex-col glow-blue group"
                     >
                         <div className="h-60 overflow-hidden relative">
-                             <img src={ev.imageUrl} alt={ev.title} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
+                        {ev.imageUrl ? (
+                             <img src={ev.imageUrl?.trim() || undefined} alt={ev.title} className="w-full h-full object-cover transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
                                   onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/800x400?text=Event' }} />
+                        ) : (
+                             <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">No Image</div>
+                        )}
                              <div className="absolute top-4 left-4 bg-white/90 dark:bg-black/80 backdrop-blur-md px-4 py-2 rounded-xl text-center shadow-lg group-hover:scale-110 transition">
                                  <span className="block text-xl font-bold text-primary-600">{new Date(ev.date).getDate()}</span>
                                  <span className="block text-xs uppercase font-bold text-gray-500">{new Date(ev.date).toLocaleString('default', { month: 'short' })}</span>
@@ -312,7 +370,16 @@ export const Events = () => {
 
 // Notices Page
 export const Notices = () => {
-    const notices = db.getNotices();
+    const [notices, setNotices] = useState<Notice[]>([]);
+
+    useEffect(() => {
+        const fetchNotices = async () => {
+            const data = await db.getNotices();
+            setNotices(data);
+        };
+        fetchNotices();
+    }, []);
+
     return (
         <div className="pt-32 pb-20 container mx-auto px-6">
             <h1 className="text-5xl font-display font-bold text-center mb-16 dark:text-white">Notice Board</h1>
@@ -349,7 +416,16 @@ export const Notices = () => {
 
 // Gallery Page
 export const Gallery = () => {
-    const images = db.getGallery();
+    const [images, setImages] = useState<GalleryItem[]>([]);
+
+    useEffect(() => {
+        const fetchImages = async () => {
+            const data = await db.getGallery();
+            setImages(data);
+        };
+        fetchImages();
+    }, []);
+
     const categories = ['All', ...Array.from(new Set(images.map(i => i.category)))];
     const [filter, setFilter] = useState('All');
     const [selectedImage, setSelectedImage] = useState<any>(null);
@@ -385,8 +461,12 @@ export const Gallery = () => {
                         onClick={() => setSelectedImage(img)}
                         className="card-3d break-inside-avoid relative group rounded-3xl overflow-hidden shadow-xl glow-rose cursor-pointer"
                     >
-                        <img src={img.imageUrl} alt={img.caption} className="w-full h-auto transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
-                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x400?text=Image' }} />
+                        {img.imageUrl ? (
+                            <img src={img.imageUrl?.trim() || undefined} alt={img.caption} className="w-full h-auto transition duration-700 group-hover:scale-110 group-hover:rotate-1" 
+                                 onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x400?text=Image' }} />
+                        ) : (
+                            <div className="w-full h-48 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">No Image</div>
+                        )}
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition duration-300 flex flex-col justify-end p-8">
                             <span className="text-primary-400 text-sm font-bold uppercase tracking-wider mb-2">{img.category}</span>
                             <p className="text-white font-bold text-xl">{img.caption}</p>
@@ -415,7 +495,11 @@ export const Gallery = () => {
                             onClick={(e) => e.stopPropagation()}
                             className="max-w-5xl w-full max-h-[90vh] flex flex-col bg-transparent rounded-3xl overflow-hidden shadow-2xl"
                          >
-                             <img src={selectedImage.imageUrl} alt={selectedImage.caption} className="w-full h-auto max-h-[80vh] object-contain bg-black/50" />
+                             {selectedImage.imageUrl ? (
+                                 <img src={selectedImage.imageUrl?.trim() || undefined} alt={selectedImage.caption} className="w-full h-auto max-h-[80vh] object-contain bg-black/50" />
+                             ) : (
+                                 <div className="w-full h-[50vh] bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">No Image</div>
+                             )}
                              <div className="bg-white dark:bg-gray-900 p-6 flex justify-between items-center">
                                  <div>
                                      <h3 className="text-2xl font-bold dark:text-white">{selectedImage.caption}</h3>
@@ -433,8 +517,16 @@ export const Gallery = () => {
 
 // Contact Page
 export const Contact = () => {
-    const info = db.getInfo();
+    const [info, setInfo] = useState<SchoolInfo | null>(null);
     const [sent, setSent] = useState(false);
+
+    useEffect(() => {
+        const fetchInfo = async () => {
+            const data = await db.getInfo();
+            setInfo(data);
+        };
+        fetchInfo();
+    }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -442,6 +534,8 @@ export const Contact = () => {
         showToast('Message sent successfully!', 'success');
         setTimeout(() => setSent(false), 3000);
     };
+
+    if (!info) return <div className="pt-32 pb-20 text-center">Loading...</div>;
 
     return (
         <div className="pt-32 pb-20 container mx-auto px-6">

@@ -63,8 +63,12 @@ const DataTable = <T extends { id?: string; username?: string }>({
                 <td key={String(col.key)} className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300 align-middle font-medium">
                   {col.type === 'image' ? (
                      <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-700 overflow-hidden shadow-sm border dark:border-gray-600">
-                        <img src={String(item[col.key])} alt="thumbnail" className="w-full h-full object-cover" 
-                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/50?text=IMG' }} />
+                        {item[col.key] ? (
+                            <img src={(item[col.key] as string)?.trim() || undefined} alt="thumbnail" className="w-full h-full object-cover" 
+                                 onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/50?text=IMG' }} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No IMG</div>
+                        )}
                      </div>
                   ) : col.type === 'longtext' ? (
                       <div className="max-w-xs truncate" title={String(item[col.key])}>

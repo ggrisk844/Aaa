@@ -1,13 +1,12 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, BookOpen, Users, Trophy, Bell, ChevronRight, Star, Award, Zap, Lightbulb, Globe, Cpu } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { db } from '../services/db';
+import { SchoolInfo, Notice } from '../types';
 
-const Hero = () => {
-  const info = db.getInfo();
-  
+const Hero = ({ info }: { info: SchoolInfo }) => {
   return (
     <section className="relative h-screen flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-900 perspective-1000">
       {/* Background Image with Overlay */}
@@ -16,7 +15,7 @@ const Hero = () => {
           initial={{ scale: 1.1 }}
           animate={{ scale: 1 }}
           transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
-          src={info.heroImage || "https://picsum.photos/1920/1080?blur=2"} 
+          src={info.heroImage?.trim() || "https://picsum.photos/1920/1080?blur=2"} 
           alt="School Campus" 
           className="w-full h-full object-cover opacity-60 dark:opacity-40"
         />
@@ -136,9 +135,7 @@ const FeatureCard = ({ iconName, title, desc, delay, color, glowClass }: any) =>
   );
 }
 
-const NoticeTicker = () => {
-    const notices = db.getNotices().slice(0, 3);
-    const info = db.getInfo();
+const NoticeTicker = ({ notices, info }: { notices: Notice[], info: SchoolInfo }) => {
     return (
         <div className="bg-primary-600 text-white py-3 overflow-hidden relative shadow-md z-20">
             <div className="container mx-auto px-6 flex items-center">
@@ -161,7 +158,21 @@ const NoticeTicker = () => {
 };
 
 export const Home = () => {
-  const info = db.getInfo();
+  const [info, setInfo] = useState<SchoolInfo | null>(null);
+  const [notices, setNotices] = useState<Notice[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const fetchedInfo = await db.getInfo();
+      const fetchedNotices = await db.getNotices();
+      setInfo(fetchedInfo);
+      setNotices(fetchedNotices.slice(0, 3));
+    };
+    fetchData();
+  }, []);
+
+  if (!info) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+
   const features = info.features || [];
 
   // Helper for alternating colors
@@ -181,8 +192,8 @@ export const Home = () => {
 
   return (
     <>
-      <Hero />
-      <NoticeTicker />
+      <Hero info={info} />
+      <NoticeTicker notices={notices} info={info} />
       
       {/* Features Section */}
       <section className="py-24 bg-gray-50 dark:bg-gray-950 relative">
@@ -221,7 +232,7 @@ export const Home = () => {
                     className="card-3d relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white dark:border-gray-800 glow-purple"
                  >
                     <img 
-                        src={info.principalImage || "https://picsum.photos/600/600?random=principal"} 
+                        src={info.principalImage?.trim() || "https://picsum.photos/600/600?random=principal"} 
                         alt="Principal" 
                         className="w-full h-auto object-cover transform transition duration-700 hover:scale-105"
                     />
