@@ -21,18 +21,29 @@ const ScrollToTop = () => {
   return null;
 };
 
-const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
+const ProtectedRoute = ({ children, requireAdmin = false }: { children?: React.ReactNode, requireAdmin?: boolean }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       const auth = await db.isAuthenticated();
       setIsAuthenticated(auth);
+      if (auth) {
+        const user = await db.getCurrentUser();
+        setIsAdmin(user?.role === 'admin');
+      }
     };
     checkAuth();
     
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
         setIsAuthenticated(!!session);
+        if (session) {
+          const user = await db.getCurrentUser();
+          setIsAdmin(user?.role === 'admin');
+        } else {
+          setIsAdmin(false);
+        }
     });
     
     return () => {
@@ -40,13 +51,18 @@ const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
     };
   }, []);
 
-  if (isAuthenticated === null) {
+  if (isAuthenticated === null || (requireAdmin && isAdmin === null)) {
       return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
+
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 };
 
@@ -83,7 +99,7 @@ const App = () => {
 
         {/* Admin Routes (Role check handled in dashboard or service usually, but simplified here) */}
         <Route path="/admin/*" element={
-          <ProtectedRoute>
+          <ProtectedRoute requireAdmin={true}>
             <AdminDashboard />
           </ProtectedRoute>
         } />

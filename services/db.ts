@@ -125,49 +125,89 @@ export const db = {
   },
 
   getUsers: async (): Promise<User[]> => {
-      const { data } = await supabase.from('users').select('*');
+      const { data } = await supabase.from('profiles').select('*');
       return data || [];
   },
   saveUser: async (user: User) => {
-      await supabase.from('users').upsert(user);
+      await supabase.from('profiles').upsert(user);
   },
-  deleteUser: async (username: string) => {
-      if (username === 'admin') return;
-      await supabase.from('users').delete().eq('username', username);
+  deleteUser: async (id: string) => {
+      const { data: user } = await supabase.from('profiles').select('username').eq('id', id).single();
+      if (user?.username === 'admin') return;
+      await supabase.from('profiles').delete().eq('id', id);
   },
 
-  signup: async (username: string, password: string): Promise<boolean> => {
-      const email = `${username}@agtsc.edu.bd`;
-      const { data, error } = await supabase.auth.signUp({
+  signup: async (username: string, password: string, email: string): Promise<boolean> => {
+      // 1. Check if username is taken
+      const { data: existingUser } = await supabase.from('profiles').select('username').eq('username', username).single();
+      if (existingUser) {
+          triggerToast('Username is already taken.', 'error');
+          return false;
+      }
+
+      // 2. Sign up with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
       });
-      if (error) {
-          triggerToast(error.message, 'error');
+      if (authError) {
+          triggerToast(authError.message, 'error');
           return false;
       }
-      
-      const newUser: User = { username, role: 'user', title: 'Visitor', bio: 'Hey there! I am using AGTSC Chat.', avatar: '', lastActive: Date.now(), blocked: [], muted: [] };
-      await supabase.from('users').insert(newUser);
-      triggerToast('Account created successfully!');
-      return true;
+
+      // 3. Create profile
+      if (authData.user) {
+          const newUser: User = { 
+              id: authData.user.id,
+              username, 
+              email,
+              role: 'user', 
+              title: 'Visitor', 
+              bio: 'Hey there! I am using AGTSC Chat.', 
+              avatar: '', 
+              lastActive: Date.now(), 
+              blocked: [], 
+              muted: [] 
+          };
+          const { error: profileError } = await supabase.from('profiles').insert(newUser);
+          if (profileError) {
+              triggerToast('Failed to create profile: ' + profileError.message, 'error');
+              return false;
+          }
+          triggerToast('Account created successfully!');
+          return true;
+      }
+      return false;
   },
 
-  login: async (username: string, password: string): Promise<User | null> => {
-      const email = `${username}@agtsc.edu.bd`;
+  login: async (input: string, password: string): Promise<User | null> => {
+      let email = input;
+      
+      // If input is not an email format, search profiles table for the email associated with that username
+      if (!input.includes('@')) {
+          const { data: profile, error: profileError } = await supabase.from('profiles').select('email').eq('username', input).single();
+          if (profileError || !profile) {
+              triggerToast('Invalid username or password.', 'error');
+              return null;
+          }
+          email = profile.email;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
       });
+      
       if (error) {
-          triggerToast(error.message, 'error');
+          triggerToast('Invalid username or password.', 'error');
           return null;
       }
-      const { data: userData } = await supabase.from('users').select('*').eq('username', username).single();
+      
+      const { data: userData } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
       if (userData) {
           userData.lastActive = Date.now();
           await db.saveUser(userData);
-          triggerToast(`Welcome back, ${username}!`);
+          triggerToast(`Welcome back, ${userData.username}!`);
           return userData;
       }
       return null;
@@ -180,10 +220,7 @@ export const db = {
   getCurrentUser: async (): Promise<User | null> => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
-      const email = session.user.email;
-      if (!email) return null;
-      const username = email.split('@')[0];
-      const { data } = await supabase.from('users').select('*').eq('username', username).single();
+      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       return data;
   },
 
@@ -201,7 +238,7 @@ export const db = {
   },
 
   isUserOnline: async (username: string): Promise<boolean> => {
-      const { data } = await supabase.from('users').select('lastActive').eq('username', username).single();
+      const { data } = await supabase.from('profiles').select('lastActive').eq('username', username).single();
       if (!data || !data.lastActive) return false;
       return (Date.now() - data.lastActive) < 2 * 60 * 1000;
   },
@@ -227,7 +264,7 @@ export const db = {
 
   searchUsers: async (query: string): Promise<User[]> => {
       const currentUser = await db.getCurrentUser();
-      const { data } = await supabase.from('users').select('*').ilike('username', `%${query}%`);
+      const { data } = await supabase.from('profiles').select('*').ilike('username', `%${query}%`);
       if (!data) return [];
       return data.filter(u => u.username !== currentUser?.username);
   },
@@ -290,7 +327,7 @@ export const db = {
       const { data: chats } = await supabase.from('chats').select('*').contains('participants', [currentUser.username]).order('lastTimestamp', { ascending: false });
       if (!chats) return [];
 
-      const { data: users } = await supabase.from('users').select('*');
+      const { data: users } = await supabase.from('profiles').select('*');
       const usersList = users || [];
 
       return chats.map(c => {

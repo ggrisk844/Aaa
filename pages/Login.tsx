@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { db } from '../services/db';
-import { Lock, User, ArrowLeft, LogIn, UserPlus, KeyRound } from 'lucide-react';
+import { Lock, User, ArrowLeft, LogIn, UserPlus, KeyRound, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -24,19 +25,19 @@ export const Login = () => {
             } else {
                 navigate('/chat');
             }
-        } else {
-            setError('Invalid username or password');
         }
     } else {
         if (username.length < 3 || password.length < 3) {
             setError('Username and password must be at least 3 characters');
             return;
         }
-        const success = await db.signup(username, password);
+        if (!email.includes('@')) {
+            setError('Please enter a valid email address');
+            return;
+        }
+        const success = await db.signup(username, password, email);
         if (success) {
             navigate('/chat'); // New users go to chat
-        } else {
-            setError('Signup failed. Username might be taken.');
         }
     }
   };
@@ -89,7 +90,9 @@ export const Login = () => {
           )}
           
           <div>
-            <label className="block text-sm font-bold mb-2 ml-1 transition-colors text-gray-700 dark:text-gray-300">Username</label>
+            <label className="block text-sm font-bold mb-2 ml-1 transition-colors text-gray-700 dark:text-gray-300">
+              {isLogin ? 'Username or Email' : 'Username'}
+            </label>
             <div className="relative">
               <User className="absolute left-4 top-4 transition-colors text-gray-400" size={20} />
               <input
@@ -98,10 +101,27 @@ export const Login = () => {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className="w-full pl-12 pr-4 py-3.5 rounded-xl border focus:ring-4 outline-none transition shadow-inner bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 dark:text-white focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Enter username"
+                placeholder={isLogin ? "Enter username or email" : "Enter username"}
               />
             </div>
           </div>
+
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-bold mb-2 ml-1 transition-colors text-gray-700 dark:text-gray-300">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-4 transition-colors text-gray-400" size={20} />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full pl-12 pr-4 py-3.5 rounded-xl border focus:ring-4 outline-none transition shadow-inner bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 dark:text-white focus:ring-indigo-500/20 focus:border-indigo-500"
+                  placeholder="Enter email address"
+                />
+              </div>
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-bold mb-2 ml-1 transition-colors text-gray-700 dark:text-gray-300">Password</label>

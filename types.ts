@@ -116,7 +116,9 @@ export interface ExamResult {
 }
 
 export interface User {
+  id: string; // Supabase Auth UID
   username: string;
+  email: string;
   role: 'admin' | 'user';
   title: string; // e.g. "Student", "Teacher", "User"
   bio?: string; // New field for user bio/status

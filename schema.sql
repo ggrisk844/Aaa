@@ -85,16 +85,38 @@ CREATE TABLE IF NOT EXISTS results (
   grade TEXT
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  username TEXT PRIMARY KEY,
-  role TEXT,
-  title TEXT,
-  bio TEXT,
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT,
+  role TEXT DEFAULT 'user',
+  title TEXT DEFAULT 'Student',
+  bio TEXT DEFAULT 'No bio yet...',
   avatar TEXT,
   "lastActive" BIGINT,
-  blocked JSONB,
-  muted JSONB
+  blocked JSONB DEFAULT '[]'::jsonb,
+  muted JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Enable RLS
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Public profiles are viewable by everyone."
+  ON profiles FOR SELECT
+  USING ( true );
+
+CREATE POLICY "Users can insert their own profile."
+  ON profiles FOR INSERT
+  WITH CHECK ( auth.uid() = id );
+
+CREATE POLICY "Users can update own profile."
+  ON profiles FOR UPDATE
+  USING ( auth.uid() = id );
+
+-- Drop old users table if it exists
+DROP TABLE IF EXISTS users;
 
 CREATE TABLE IF NOT EXISTS chats (
   id TEXT PRIMARY KEY,
@@ -136,13 +158,17 @@ ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 -- Create public policies for all tables (Allow all operations for anon)
+-- EXCLUDING profiles table which has its own secure policies
 DO $$ 
 DECLARE
   t text;
 BEGIN
   FOR t IN 
-    SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
+    SELECT table_name FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name != 'profiles'
   LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "Allow public access" ON %I;', t);
     EXECUTE format('CREATE POLICY "Allow public access" ON %I FOR ALL USING (true) WITH CHECK (true);', t);
   END LOOP;
 END $$;

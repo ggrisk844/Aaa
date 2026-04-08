@@ -282,30 +282,53 @@ const ResourceManager = ({
 
 // User Manager
 const UserManager = () => {
-    const [users, setUsers] = useState<User[]>(db.getUsers());
+    const [users, setUsers] = useState<User[]>([]);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
 
-    useEffect(() => { setUsers(db.getUsers()); }, []);
-
-    const handleSave = () => {
-        if (editingUser) {
-            db.saveUser(editingUser);
-            setEditingUser(null);
-            setUsers(db.getUsers());
-            showToast('User updated successfully');
+    const refreshUsers = async () => {
+        setLoading(true);
+        try {
+            const data = await db.getUsers();
+            setUsers(data);
+        } catch (error) {
+            console.error(error);
+            showToast('Failed to load users', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleDelete = (username: string) => {
-        if (username === 'admin') {
+    useEffect(() => { refreshUsers(); }, []);
+
+    const handleSave = async () => {
+        if (editingUser) {
+            try {
+                await db.saveUser(editingUser);
+                setEditingUser(null);
+                await refreshUsers();
+                showToast('User updated successfully');
+            } catch (error) {
+                showToast('Failed to update user', 'error');
+            }
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        const userToDelete = users.find(u => u.id === id);
+        if (userToDelete?.username === 'admin') {
             showToast("Cannot delete system admin", "error");
             return;
         }
-        if(window.confirm(`Are you sure you want to delete user @${username}? This cannot be undone.`)) {
-            db.deleteUser(username);
-            setUsers(db.getUsers());
-            showToast(`User @${username} deleted successfully`);
+        if(window.confirm(`Are you sure you want to delete user @${userToDelete?.username}? This cannot be undone.`)) {
+            try {
+                await db.deleteUser(id);
+                await refreshUsers();
+                showToast(`User @${userToDelete?.username} deleted successfully`);
+            } catch (error) {
+                showToast('Failed to delete user', 'error');
+            }
         }
     };
 
@@ -314,6 +337,10 @@ const UserManager = () => {
         (user.title && user.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    if (loading && users.length === 0) {
+        return <div className="flex items-center justify-center p-12">Loading users...</div>;
+    }
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -385,15 +412,25 @@ const UserManager = () => {
 
 // Settings Page
 const SettingsPage = () => {
-    const [info, setInfo] = useState<SchoolInfo>(db.getInfo());
+    const [info, setInfo] = useState<SchoolInfo>({ name: '', address: '', phone: '', email: '', principalMessage: '', history: '', mission: '', vision: '', mapEmbedUrl: '', logoUrl: '' });
     const [activeTab, setActiveTab] = useState<'general' | 'home' | 'about' | 'classInfo'>('general');
+    const [loading, setLoading] = useState(true);
     
-    useEffect(() => { setInfo(db.getInfo()); }, []);
+    useEffect(() => { 
+        const fetchInfo = async () => {
+            setLoading(true);
+            const data = await db.getInfo();
+            setInfo(data);
+            setLoading(false);
+        };
+        fetchInfo(); 
+    }, []);
 
-    const handleSave = () => {
-        db.updateInfo(info);
-        showToast('Settings saved successfully!');
+    const handleSave = async () => {
+        await db.updateInfo(info);
     };
+
+    if (loading) return <div className="p-12 text-center">Loading settings...</div>;
 
     // --- Helper to remove a class card ---
     const deleteClassInfo = (index: number) => {
